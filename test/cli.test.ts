@@ -290,22 +290,15 @@ describe('CLI options testing', () => {
     expect(numberOfErrors).toEqual(expectedErrors.length);
   });
 
-  it('should work with path alias', async () => {
-    const pathAlias = '@/customBaseQuery';
+  it('should works when --baseQuery is specified in the format of URL with default export.', async () => {
+    const pathAlias = 'https://deno.land/std/http/server.ts';
     const result = await cli(
-      [
-        '-h',
-        `--baseQuery`,
-        `${pathAlias}:anotherNamedBaseQuery`,
-        '-c',
-        'test/tsconfig.json',
-        `./test/fixtures/petstore.json`,
-      ],
+      ['-h', `--baseQuery`, `${pathAlias}:listenAndServe`, '-c', 'test/tsconfig.json', `./test/fixtures/petstore.json`],
       '.'
     );
 
     expect(result.stdout).not.toContain('fetchBaseQuery');
-    expect(result.stdout).toContain(`import { anotherNamedBaseQuery } from \"${pathAlias}\"`);
+    expect(result.stdout).toContain(`import { listenAndServe } from \"${pathAlias}\"`);
 
     const expectedErrors = [MESSAGES.NAMED_EXPORT_MISSING];
 
@@ -313,13 +306,84 @@ describe('CLI options testing', () => {
     expect(numberOfErrors).toEqual(0);
   });
 
-  it('should work with path alias with file extension', async () => {
+  it('should error out when the specified filename provided to --baseQuery has no default export with URL format', async () => {
+    const pathAlias = 'https://deno.land/std/http/server.ts';
+    const result = await cli(
+      ['-h', `--baseQuery`, `${pathAlias}`, '-c', 'test/tsconfig.json', `./test/fixtures/petstore.json`],
+      '.'
+    );
+
+    const expectedErrors = [MESSAGES.DEFAULT_EXPORT_MISSING];
+
+    const numberOfErrors = expectedErrors.filter((msg) => result.stderr.indexOf(msg) > -1).length;
+    expect(numberOfErrors).toEqual(expectedErrors.length);
+  });
+
+  it('should error out when the specified filename provided to --baseQuery has no named export with URL format', async () => {
+    const pathAlias = 'https://deno.land/std/http/server.ts';
+    const result = await cli(
+      ['-h', `--baseQuery`, `${pathAlias}:noNamedExport`, '-c', 'test/tsconfig.json', `./test/fixtures/petstore.json`],
+      '.'
+    );
+
+    const expectedErrors = [MESSAGES.NAMED_EXPORT_MISSING];
+
+    const numberOfErrors = expectedErrors.filter((msg) => result.stderr.indexOf(msg) > -1).length;
+    expect(numberOfErrors).toEqual(expectedErrors.length);
+  });
+
+  it('should error out when fetch failed the specified URL provided to --baseQuery', async () => {
+    const pathAlias = 'https://deno.land/std/http/server.tssssss';
+    const result = await cli(
+      ['-h', `--baseQuery`, `${pathAlias}`, '-c', 'test/tsconfig.json', `./test/fixtures/petstore.json`],
+      '.'
+    );
+
+    const expectedErrors = [MESSAGES.URL_NOT_FOUND];
+
+    const numberOfErrors = expectedErrors.filter((msg) => result.stderr.indexOf(msg) > -1).length;
+    expect(numberOfErrors).toEqual(expectedErrors.length);
+  });
+
+  it('should works when --baseQuery is specified in the format of URL.', async () => {
+    const pathAlias = '@/customBaseQuery';
+    const result = await cli(
+      ['-h', `--baseQuery`, `${pathAlias}`, '-c', 'test/tsconfig.json', `./test/fixtures/petstore.json`],
+      '.'
+    );
+
+    expect(result.stdout).not.toContain('fetchBaseQuery');
+    expect(result.stdout).toContain(`import { default as customBaseQuery } from \"${pathAlias}\"`);
+
+    const expectedErrors = [MESSAGES.NAMED_EXPORT_MISSING];
+
+    const numberOfErrors = expectedErrors.filter((msg) => result.stderr.indexOf(msg) > -1).length;
+    expect(numberOfErrors).toEqual(0);
+  });
+
+  it('should works when --baseQuery is specified in the format of path alias with default export.', async () => {
+    const pathAlias = '@/customBaseQuery';
+    const result = await cli(
+      ['-h', `--baseQuery`, `${pathAlias}`, '-c', 'test/tsconfig.json', `./test/fixtures/petstore.json`],
+      '.'
+    );
+
+    expect(result.stdout).not.toContain('fetchBaseQuery');
+    expect(result.stdout).toContain(`import { default as customBaseQuery } from \"${pathAlias}\"`);
+
+    const expectedErrors = [MESSAGES.NAMED_EXPORT_MISSING];
+
+    const numberOfErrors = expectedErrors.filter((msg) => result.stderr.indexOf(msg) > -1).length;
+    expect(numberOfErrors).toEqual(0);
+  });
+
+  it('should works when --baseQuery is specified in the format of path alias.', async () => {
     const pathAlias = '@/customBaseQuery';
     const result = await cli(
       [
         '-h',
         `--baseQuery`,
-        `${pathAlias}.ts:anotherNamedBaseQuery`,
+        `${pathAlias}:anotherNamedBaseQuery`,
         '-c',
         'test/tsconfig.json',
         `./test/fixtures/petstore.json`,

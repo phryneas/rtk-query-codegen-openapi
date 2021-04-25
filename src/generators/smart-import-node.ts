@@ -1,37 +1,40 @@
 import * as ts from 'typescript';
 import * as fs from 'fs';
+import fetch from 'node-fetch';
 
-import { MESSAGES, stripFileExtension } from '../utils';
+import { isValidUrl, MESSAGES, stripFileExtension } from '../utils';
 import { isModuleInsidePathAlias } from '../utils/isModuleInsidePathAlias';
 import { generateImportNode } from './import-node';
 import { fnExportExists } from '../utils/fnExportExists';
 import { resolveImportPath } from '../utils/resolveImportPath';
+import { fnExportExistsByFilePath } from '../utils/fnExportExistsByFilePath';
+import { createSourceFile } from '../utils/createSourceFile';
 
 type SmartGenerateImportNode = {
   moduleName: string;
   containingFile?: string;
-  targetName: string;
-  targetAlias: string;
+  importTarget: string;
+  importTargetAlias: string;
   compilerOptions?: ts.CompilerOptions;
 };
-export const generateSmartImportNode = ({
+export const generateSmartImportNode = async ({
   moduleName,
   containingFile,
-  targetName,
-  targetAlias,
+  importTarget,
+  importTargetAlias,
   compilerOptions,
-}: SmartGenerateImportNode): ts.ImportDeclaration => {
+}: SmartGenerateImportNode): Promise<ts.ImportDeclaration> => {
   if (fs.existsSync(moduleName)) {
-    if (fnExportExists(moduleName, targetName)) {
+    if (fnExportExistsByFilePath(moduleName, importTarget)) {
       return generateImportNode(
         stripFileExtension(containingFile ? resolveImportPath(moduleName, containingFile) : moduleName),
         {
-          [targetName]: targetAlias,
+          [importTarget]: importTargetAlias,
         }
       );
     }
 
-    if (targetName === 'default') {
+    if (importTarget === 'default') {
       throw new Error(MESSAGES.DEFAULT_EXPORT_MISSING);
     }
     throw new Error(MESSAGES.NAMED_EXPORT_MISSING);
@@ -42,10 +45,31 @@ export const generateSmartImportNode = ({
   }
 
   // maybe moduleName is path alias
-  if (isModuleInsidePathAlias(compilerOptions, moduleName)) {
+  const maybeFullPath = isModuleInsidePathAlias(compilerOptions, moduleName);
+  if (maybeFullPath && fnExportExistsByFilePath(maybeFullPath, importTarget)) {
     return generateImportNode(stripFileExtension(moduleName), {
-      [targetName]: targetAlias,
+      [importTarget]: importTargetAlias,
     });
+  }
+
+  // maybe moduleName is url. eg. https://deno.land/std/http/server.ts
+  if (isValidUrl(moduleName)) {
+    const response = await fetch(moduleName);
+    if (response.ok) {
+      const maybeJsOrTsFile = await response.text();
+      if (fnExportExists(createSourceFile(maybeJsOrTsFile), importTarget)) {
+        return generateImportNode(moduleName, {
+          [importTarget]: importTargetAlias,
+        });
+      }
+
+      if (importTarget === 'default') {
+        throw new Error(MESSAGES.DEFAULT_EXPORT_MISSING);
+      }
+      throw new Error(MESSAGES.NAMED_EXPORT_MISSING);
+    }
+
+    throw new Error(MESSAGES.URL_NOT_FOUND);
   }
 
   throw new Error(MESSAGES.FILE_NOT_FOUND);
